@@ -152,7 +152,7 @@ web-search = [
 
 [[package]]
 name = "aieng-eval-agents"
-version = "0.3.0"
+version = "0.3.1"
 source = { editable = "aieng-eval-agents" }
 dependencies = [
     { name = "google-adk" },
