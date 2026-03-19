@@ -22,7 +22,7 @@ from aieng.agent_evals.tools import (
 )
 
 from .agent import KnowledgeAgentManager, KnowledgeGroundedAgent
-from .data import DeepSearchQADataset, DSQAExample
+from .data import BloombergNewsExample, BloombergFinancialNewsDataset
 
 
 __all__ = [
@@ -35,6 +35,6 @@ __all__ = [
     "GroundedResponse",
     "GroundingChunk",
     # Evaluation
-    "DeepSearchQADataset",
-    "DSQAExample",
+    "BloombergFinancialNewsDataset",
+    "BloombergNewsExample",
 ]
