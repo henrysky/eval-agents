@@ -33,24 +33,26 @@ class NewsQuality(str, Enum):
 
 
 class BloombergNewsResult(BaseModel):
-    """Evaluation result for financial news responses."""
+    """Evaluation result for financial news responses tailored to capital markets."""
 
-    accuracy: float = Field(0.0, description="Factual correctness (0-1)")
-    relevance: float = Field(0.0, description="Relevance to the question (0-1)")
-    insight: float = Field(0.0, description="Depth of financial insight (0-1)")
-    clarity: float = Field(0.0, description="Clarity and readability (0-1)")
+    factual_accuracy: float = Field(0.0, description="Are financial figures, dates, and entity names correct? (0-1)")
+    financial_completeness: float = Field(0.0, description="Does the response include key metrics: EPS, revenue, YoY change, beat/miss estimates, dividend? (0-1)")
+    market_impact: float = Field(0.0, description="Does it explain implications for investors, stock price, or the sector? (0-1)")
+    source_quality: float = Field(0.0, description="Does it cite credible sources with proper attribution? (0-1)")
+    actionability: float = Field(0.0, description="Could a trader or analyst act on this information? (0-1)")
 
-    overall_score: float = Field(0.0, description="Average score (0-1)")
+    overall_score: float = Field(0.0, description="Weighted average score (0-1)")
     quality: NewsQuality = Field(default=NewsQuality.POOR)
 
     explanation: str = Field(default="", description="Grader explanation")
 
     def to_evaluations(self) -> list[Evaluation]:
         comment = (
-            f"Accuracy: {self.accuracy:.2f}\n"
-            f"Relevance: {self.relevance:.2f}\n"
-            f"Insight: {self.insight:.2f}\n"
-            f"Clarity: {self.clarity:.2f}\n"
+            f"Factual Accuracy: {self.factual_accuracy:.2f}\n"
+            f"Financial Completeness: {self.financial_completeness:.2f}\n"
+            f"Market Impact: {self.market_impact:.2f}\n"
+            f"Source Quality: {self.source_quality:.2f}\n"
+            f"Actionability: {self.actionability:.2f}\n"
             f"Overall: {self.overall_score:.2f}\n\n"
             f"Explanation: {self.explanation}"
         )
@@ -58,8 +60,11 @@ class BloombergNewsResult(BaseModel):
         return [
             Evaluation(name="Quality", value=self.quality.value, comment=self.explanation),
             Evaluation(name="Overall", value=self.overall_score, comment=comment),
-            Evaluation(name="Accuracy", value=self.accuracy, comment=comment),
-            Evaluation(name="Insight", value=self.insight, comment=comment),
+            Evaluation(name="Factual Accuracy", value=self.factual_accuracy, comment=comment),
+            Evaluation(name="Financial Completeness", value=self.financial_completeness, comment=comment),
+            Evaluation(name="Market Impact", value=self.market_impact, comment=comment),
+            Evaluation(name="Source Quality", value=self.source_quality, comment=comment),
+            Evaluation(name="Actionability", value=self.actionability, comment=comment),
         ]
 
     @staticmethod
@@ -68,8 +73,11 @@ class BloombergNewsResult(BaseModel):
         return [
             Evaluation(name="Quality", value="poor", comment=comment),
             Evaluation(name="Overall", value=0.0, comment=comment),
-            Evaluation(name="Accuracy", value=0.0, comment=comment),
-            Evaluation(name="Insight", value=0.0, comment=comment),
+            Evaluation(name="Factual Accuracy", value=0.0, comment=comment),
+            Evaluation(name="Financial Completeness", value=0.0, comment=comment),
+            Evaluation(name="Market Impact", value=0.0, comment=comment),
+            Evaluation(name="Source Quality", value=0.0, comment=comment),
+            Evaluation(name="Actionability", value=0.0, comment=comment),
         ]
 
 
@@ -83,30 +91,52 @@ class BloombergGraderResponse(BaseModel):
 
 
 BLOOMBERG_GRADER_PROMPT = """\
-You are a financial news editor at Bloomberg.
+You are a senior capital markets analyst evaluating an AI research assistant's
+output about Canadian Big Five bank news. You need this information to make
+portfolio and trading decisions.
 
-Your task is to evaluate the quality of an AI-generated financial news response.
+Evaluate the response on these five dimensions, each scored 0 to 1:
 
-Focus on:
+1. Factual Accuracy (0-1)
+- Are financial figures (net income, EPS, revenue, percentages) correct?
+- Are dates, entity names, and event descriptions accurate?
+- Are there any fabricated or hallucinated claims?
 
-1. Accuracy (0-1)
-- Are the financial facts correct?
-- Are claims plausible and not misleading?
+2. Financial Completeness (0-1)
+- For earnings questions: does it include net income, EPS, YoY change,
+  beat/miss vs estimates, revenue, and dividend changes where applicable?
+- For non-earnings questions: does it cover all key facts a capital markets
+  analyst would need?
+- Score 0.0 if only a single headline fact is given with no supporting detail.
+  Score 1.0 if all material financial metrics are present.
 
-2. Relevance (0-1)
-- Does the response directly answer the question?
+3. Market Impact (0-1)
+- Does it explain what the news means for investors, stock prices, or the sector?
+- Does it provide forward-looking context (analyst outlook, rate expectations,
+  peer comparisons)?
+- Score 0.0 if it just states facts with no analysis. Score 1.0 if a trader
+  could make a decision based on this response.
 
-3. Insight (0-1)
-- Does it provide meaningful market insight or analysis?
-- Does it explain implications (investors, economy, markets)?
+4. Source Quality (0-1)
+- Does it cite specific, credible sources (Bloomberg, Reuters, bank press
+  releases, regulatory filings, earnings reports)?
+- Are citations formatted with publication name, date, and title/URL?
+- Score 0.0 if no sources cited. Score 0.5 if sources mentioned but vague.
+  Score 1.0 if properly attributed credible sources.
 
-4. Clarity (0-1)
-- Is it well-written and easy to understand?
+5. Actionability (0-1)
+- Could a portfolio manager or trader act on this information?
+- Is the information specific enough (not vague generalizations)?
+- Does it distinguish between confirmed facts and speculation?
 
-5. Overall Score (0-1)
-- Average of the above
+Overall Score: weighted average with these weights:
+- Factual Accuracy: 30%
+- Financial Completeness: 25%
+- Market Impact: 20%
+- Source Quality: 15%
+- Actionability: 10%
 
-6. Quality Label
+Quality Label based on Overall:
 - excellent (>=0.85)
 - good (>=0.7)
 - fair (>=0.5)
@@ -114,17 +144,18 @@ Focus on:
 
 Return JSON format:
 
-{
-  "Evaluation": {
-    "Accuracy": float,
-    "Relevance": float,
-    "Insight": float,
-    "Clarity": float,
+{{
+  "Evaluation": {{
+    "Factual Accuracy": float,
+    "Financial Completeness": float,
+    "Market Impact": float,
+    "Source Quality": float,
+    "Actionability": float,
     "Overall": float,
     "Quality": "excellent|good|fair|poor",
     "Explanation": "..."
-  }
-}
+  }}
+}}
 
 User Prompt:
 {prompt}
@@ -135,20 +166,22 @@ AI Response:
 
 
 def _parse_bloomberg_result(grader_result: dict[str, Any]) -> BloombergNewsResult:
-    accuracy = grader_result.get("Accuracy", 0.0)
-    relevance = grader_result.get("Relevance", 0.0)
-    insight = grader_result.get("Insight", 0.0)
-    clarity = grader_result.get("Clarity", 0.0)
+    factual_accuracy = grader_result.get("Factual Accuracy", 0.0)
+    financial_completeness = grader_result.get("Financial Completeness", 0.0)
+    market_impact = grader_result.get("Market Impact", 0.0)
+    source_quality = grader_result.get("Source Quality", 0.0)
+    actionability = grader_result.get("Actionability", 0.0)
     overall = grader_result.get("Overall", 0.0)
 
     quality = grader_result.get("Quality", "poor")
     explanation = grader_result.get("Explanation", "")
 
     return BloombergNewsResult(
-        accuracy=accuracy,
-        relevance=relevance,
-        insight=insight,
-        clarity=clarity,
+        factual_accuracy=factual_accuracy,
+        financial_completeness=financial_completeness,
+        market_impact=market_impact,
+        source_quality=source_quality,
+        actionability=actionability,
         overall_score=overall,
         quality=NewsQuality(quality),
         explanation=explanation,
@@ -284,26 +317,50 @@ answered a question about Canadian bank earnings and financial news.
 **Answer Correctness Task**
 * **Purpose:** Assess whether the AI response provides the correct answer(s) based on
 the provided "Correct Answer" and "Prompt Type".
-* **Process:**
+
+**Financial Equivalence Rules — IMPORTANT:**
+When comparing financial figures, treat these as equivalent:
+- Different scales: "C$2.3 billion" = "C$2,300 million" = "$2,304 million" = "C$2.3B"
+- Currency symbols: "C$" = "CAD" = "Canadian dollars"
+- Percentage formats: "17 percent" = "17%" = "17 per cent"
+- Minor rounding: "$2.19 billion" matches "$2.2 billion" (within 1% is acceptable)
+- Implicit currency: If the question is about a Canadian bank, "$2.3 billion" without
+  a currency prefix should be treated as C$ unless explicitly stated as USD.
+The core financial fact matters, not the exact formatting.
+
+**Process:**
   * Identify the "Prompt Type": "{prompt_type}".
   * Refer to the "Correct Answer": "{answer}".
   * Based on the "Prompt Type", determine if the "AI Response" contains the expected
 answer(s).
-    * **'Single Answer'**: Check if the response provides the answer that addresses
-the user's question. It does not have to match the exact wording of the provided
-answer. For financial figures, accept equivalent representations (e.g., "C$2.3B"
-matches "C$2.3 billion").
+    * **'Single Answer'**: Treat the correct answer as ONE answer with potentially
+multiple supporting details. The key fact is the FIRST/PRIMARY claim. If the
+response gets the primary fact right, mark the entire answer as correct even if
+minor supporting details differ. Create only ONE key in Correctness Details
+representing the core answer.
     * **'Set Answer'**: Check if the response includes *each* item from the provided
 ground truth answers. The order does not matter. The response might include more
 answers than the list. Determine the correctness *only* based on the list first
 and then check if the response includes answers not in the list.
+
+**Handling "Not Available" / Unanswerable Questions:**
+If the correct answer states that information is "not available" or "not covered":
+- The response is CORRECT if it acknowledges the information cannot be found or is
+  unavailable, even if worded differently.
+- The response is INCORRECT if it fabricates an answer or presents unverified claims
+  as facts.
+
 * **Explanation:** Provide a brief explanation justifying your assessment, referencing
 specific parts of the AI response and the correct answer.
 * **Correctness Details:** Provide a dictionary, one key for each expected answer
 part, and value is a boolean indicating whether each expected answer part was found.
+  * For 'Single Answer': use ONE key that captures the core expected answer.
+  * For 'Set Answer': use one key per expected item.
 * **Excessive Answers:** Provide a list of strings indicating any extra answer parts
-in the response that are **not** in the "Correct Answer". Return an empty list when
-there are no excessive answers.
+in the response that are **not** in the "Correct Answer". For financial responses,
+do NOT count additional context, analysis, or source citations as excessive — only
+count factually distinct claims that contradict or go beyond the expected answer.
+Return an empty list when there are no excessive answers.
 
 **Output Format:**
 Return a valid JSON dictionary with the top-level key "Answer Correctness".
