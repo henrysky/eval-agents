@@ -195,7 +195,7 @@
     }
   },
   {
-    "input": "What common theme drove record profits at both BMO and Scotiabank in Q3 2013?",
+    "input": "Both BMO and Scotiabank in Q3 2013 reported record profits in which business segments?",
     "expected_output": "Both banks posted record results in Canadian consumer lending and wealth management",
     "metadata": {
       "example_id": 16,

@@ -186,7 +186,7 @@ def _parse_response_sections(text: str) -> tuple[str, list[str], str]:
     reasoning = reasoning_match.group(1).strip() if reasoning_match else ""
 
     # Sources may be newline- or comma-separated URLs
-    sources = [s.strip() for s in re.split(r"[\n,]+", sources_raw) if s.strip().startswith("http")]
+    sources = [s.strip() for s in re.split(r"[\n,]+", sources_raw)]
 
     return answer, sources, reasoning
 
