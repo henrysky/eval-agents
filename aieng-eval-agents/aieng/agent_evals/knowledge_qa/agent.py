@@ -22,6 +22,7 @@ from aieng.agent_evals.tools import (
     create_web_fetch_tool,
 )
 from google.adk.agents import Agent
+from google.adk.agents.invocation_context import LlmCallsLimitExceededError
 from google.adk.agents.context_cache_config import ContextCacheConfig
 from google.adk.apps.app import App, EventsCompactionConfig
 from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
@@ -558,14 +559,20 @@ class KnowledgeGroundedAgent:
         }
 
         event_count = 0
-        async for event in self._runner.run_async(
-            user_id="user",
-            session_id=adk_session_id,
-            new_message=content,
-            run_config=RunConfig(max_llm_calls=3),
-        ):
-            event_count += 1
-            self._process_event(event, question, results)
+        try:
+            async for event in self._runner.run_async(
+                user_id="user",
+                session_id=adk_session_id,
+                new_message=content,
+                run_config=RunConfig(max_llm_calls=20),
+            ):
+                event_count += 1
+                self._process_event(event, question, results)
+        except LlmCallsLimitExceededError:
+            logger.warning(
+                f"LLM call limit (20) reached after {event_count} events. "
+                f"Returning partial results with {len(results.get('tool_calls', []))} tool calls."
+            )
 
         logger.debug(f"Processed {event_count} events. Final response length: {len(results.get('final_response', ''))}")
         return results
